@@ -98,6 +98,7 @@ class QueueCog(commands.Cog):
             title = f'**{ctx.author.display_name}** has been added to the queue'
 
         # Check and burst queue if full
+        '''
         if len(queue.active) == queue.capacity:
             embed, user_mentions = self.burst_queue(ctx.guild)
             await ctx.send(user_mentions, embed=embed)
@@ -111,6 +112,7 @@ class QueueCog(commands.Cog):
                     pass
 
             queue.last_msg = await ctx.send(embed=embed)
+        '''
 
     @commands.command(brief='Leave the queue (or the bursted queue)')
     async def leave(self, ctx):
