@@ -5,9 +5,7 @@ from .console import ConsoleCog
 from .dbl import DblCog
 from .help import HelpCog
 from .mapdraft import MapDraftCog
-from .popflash import PopflashCog
 from .queue import QueueCog
-from .teamdraft import TeamDraftCog
 
 __all__ = [
     CacherCog,
@@ -15,7 +13,5 @@ __all__ = [
     DblCog,
     HelpCog,
     MapDraftCog,
-    PopflashCog,
-    QueueCog,
-    TeamDraftCog
+    QueueCog
 ]

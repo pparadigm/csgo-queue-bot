@@ -14,11 +14,9 @@ def run(discord_token, dbl_token=None, donate_url=None, generic=False):
     bot.add_cog(cogs.ConsoleCog(bot))
     bot.add_cog(cogs.HelpCog(bot, BOT_COLOR))
     bot.add_cog(cogs.QueueCog(bot, BOT_COLOR))
-    bot.add_cog(cogs.TeamDraftCog(bot, BOT_COLOR))
 
     if not generic:
         bot.add_cog(cogs.MapDraftCog(bot, BOT_COLOR))
-        bot.add_cog(cogs.PopflashCog(bot, BOT_COLOR))
         bot.remove_command('cap')
 
     if dbl_token:
