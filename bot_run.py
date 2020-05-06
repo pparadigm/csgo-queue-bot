@@ -1,3 +1,0 @@
-import qbot
-DISCORD_TOKEN = 'NzA3NDY5ODMxMjgwMjYzMTY4.XrJeJA.d-568Um6MxNU8loTLQKI60vE0Ng'
-qbot.run(discord_token=DISCORD_TOKEN)
