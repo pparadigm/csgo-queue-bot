@@ -83,7 +83,7 @@ class QueueCog(commands.Cog):
 
         pop_embed = discord.Embed(title='Queue has filled up!', description=description, color=self.color)
         return pop_embed, user_mentions
-
+    
     @commands.command(brief='Join the queue')
     async def join(self, ctx):
         """ Check if the member can be added to the guild queue and add them if so. """
@@ -118,7 +118,9 @@ class QueueCog(commands.Cog):
     async def leave(self, ctx):
         """ Check if the member can be remobed from the guild and remove them if so. """
         queue = self.guild_queues[ctx.guild]
-
+        flag = False    #Flag for checking if author is top of queue
+        if ctx.author == queue.active[0]:
+            flag = True
         if ctx.author in queue.active:
             queue.active.remove(ctx.author)
             title = f'**{ctx.author.display_name}** has been removed from the queue '
@@ -126,7 +128,6 @@ class QueueCog(commands.Cog):
             title = f'**{ctx.author.display_name}** isn\'t in the queue '
 
         embed = self.queue_embed(ctx.guild, title)
-
         if queue.last_msg:
             try:
                 await queue.last_msg.delete()
@@ -134,13 +135,19 @@ class QueueCog(commands.Cog):
                 pass
 
         queue.last_msg = await ctx.channel.send(embed=embed)
+        if flag:
+            if len(queue.active) > 0:
+                mention = queue.active[0].id
+                await ctx.send(f"<@{mention}>, you're good to go!")
+            if len(queue.active) > 1:
+                mention = queue.active[1].id
+                await ctx.send(f"<@{mention}>, please be on deck with your Dodo Code!")
 
     @commands.command(brief='Display who is currently in the queue')
     async def view(self, ctx):
         """  Display the queue as an embed list of mentioned names. """
         queue = self.guild_queues[ctx.guild]
         embed = self.queue_embed(ctx.guild, 'Players in queue')
-
         if queue.last_msg:
             try:
                 await queue.last_msg.delete()
@@ -160,7 +167,11 @@ class QueueCog(commands.Cog):
             await ctx.send(embed=embed)
         else:
             queue = self.guild_queues[ctx.guild]
-
+            
+            flag = False    #Flag for checking if removee is top of queue
+            if removee == queue.active[0]:
+                flag = True
+                
             if removee in queue.active:
                 queue.active.remove(removee)
                 title = f'**{removee.display_name}** has been removed from the queue'
@@ -197,6 +208,14 @@ class QueueCog(commands.Cog):
                     pass
 
             queue.last_msg = await ctx.send(embed=embed)
+            
+            if flag:
+                if len(queue.active) > 0:
+                    mention = queue.active[0].id
+                    await ctx.send(f"<@{mention}>, you're good to go!")
+                if len(queue.active) > 1:
+                    mention = queue.active[1].id
+                    await ctx.send(f"<@{mention}>, please be on deck with your Dodo Code!")
 
     @commands.command(brief='Empty the queue (must have server kick perms)')
     @commands.has_permissions(kick_members=True)
