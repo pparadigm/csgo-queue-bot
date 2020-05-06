@@ -13,7 +13,6 @@ __all__ = [
     CacherCog,
     ConsoleCog,
     DblCog,
-    DonateCog,
     HelpCog,
     MapDraftCog,
     PopflashCog,
