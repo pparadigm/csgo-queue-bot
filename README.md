@@ -7,7 +7,7 @@
 
 This script uses the Discord Python API via a bot to manage queues of CS:GO players who want to play with other Discord server members. It is complete with a queueing system, team drafter, map drafter and a link to a unique PopFlash lobby.
 
-
+Testing item here
 ## Setup
 1. First you must have a bot instance to run this script on. Follow Discord's tutorial [here](https://discord.onl/2019/03/21/how-to-set-up-a-bot-application/) on how to set one up. Be sure to invite it to a server to use it.
 
