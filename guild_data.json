@@ -1,1 +1,17 @@
-{"707466239639027745": {"queue": {"active": [], "bursted": [], "capacity": 10}, "mdraft": {"map_pool": ["de_dust2", "de_inferno", "de_mirage", "de_nuke", "de_overpass", "de_train", "de_vertigo"]}}}
+{"707466239639027745":
+	{"queue":
+		{"active": [],
+		"bursted": [],
+		"capacity": 30},
+		"mdraft":
+			{"map_pool":
+			["de_dust2",
+			"de_inferno",
+			"de_mirage",
+			"de_nuke",
+			"de_overpass",
+			"de_train",
+			"de_vertigo"]
+		}
+	}
+}

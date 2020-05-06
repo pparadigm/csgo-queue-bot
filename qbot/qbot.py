@@ -24,7 +24,4 @@ def run(discord_token, dbl_token=None, donate_url=None, generic=False):
     if dbl_token:
         bot.add_cog(cogs.DblCog(bot, dbl_token))
 
-    if donate_url:
-        bot.add_cog(cogs.DonateCog(bot, BOT_COLOR, donate_url))
-
     bot.run(discord_token)
