@@ -3,7 +3,7 @@
 from discord.ext import commands
 import cogs
 
-BOT_COLOR = 0x0D61B7
+BOT_COLOR = 0x0DA0B7
 DATA_PATH = 'guild_data.json'
 
 
