@@ -116,7 +116,7 @@ class QueueCog(commands.Cog):
     async def leave(self, ctx):
         """ Check if the member can be remobed from the guild and remove them if so. """
         queue = self.guild_queues[ctx.guild]
-
+        print(queue)
         if ctx.author in queue.active:
             queue.active.remove(ctx.author)
             title = f'**{ctx.author.display_name}** has been removed from the queue '
