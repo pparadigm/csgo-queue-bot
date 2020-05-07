@@ -44,7 +44,6 @@ class CacherCog(commands.Cog):
             guild_data = {}
             guild_data['queue'] = {}
             guild_data['queue']['active'] = [user.id for user in guild_queue.active]
-            guild_data['queue']['bursted'] = [user.id for user in guild_queue.bursted]
             guild_data['queue']['capacity'] = guild_queue.capacity
 
             if mapdraft_cog:
@@ -76,9 +75,7 @@ class CacherCog(commands.Cog):
             if guild_queue and 'queue' in guild_data:
                 guild_queue.capacity = guild_data['queue']['capacity']
                 active = guild_data['queue']['active']
-                bursted = guild_data['queue']['bursted']
                 guild_queue.active = [self.bot.get_user(id) for id in active if self.bot.get_user(id)]
-                guild_queue.bursted = [self.bot.get_user(id) for id in bursted if self.bot.get_user(id)]
 
             if mapdraft_cog:  # Generic bot version doesn't have MapDraft cog
                 guild_mdraft = mapdraft_cog.guild_mdraft_data.get(guild)
