@@ -4,22 +4,42 @@ import discord
 from discord.ext import commands
 
 
+class Iconography:
+    """ A group of attributes representing a command reaction. """
+
+    def __init__(self, name, emoji, image_url):
+        """ Set attributes. """
+        self.name = name
+        self.emoji = emoji
+        self.image_url = image_url
+
+BASE_URL = 'https://raw.githubusercontent.com/alrlchoa/acnh-water-bot/tree/master/assets/maps/images/'
+
+watering_can = Iconography('Watering Can', '<:watering_can:707933922125676634>', f'{BASE_URL}watering_can.png')
+
+class Announcement:
+    """A group of attributes representing the current running post. Needed to keep track of current poster."""
+    def __init__(self, message=None, host=None):
+        self.message = message
+        self.host = host
+
 class QQueue:
     """ Queue class for the bot. """
 
-    def __init__(self, active=None, capacity=10, bursted=None, timeout=None, last_msg=None):
+    def __init__(self, active=None, capacity=10, timeout=None, last_msg=None):
         """ Set attributes. """
         # Assign empty lists inside function to make them unique to objects
         self.active = [] if active is None else active  # List of players in the queue
         self.capacity = capacity  # Max queue size
-        self.bursted = [] if bursted is None else bursted  # Cached last filled queue
         # self.timeout = timeout  # Number of minutes of inactivity after which to empty the queue
         self.last_msg = last_msg  # Last sent confirmation message for the join command
+        self.curr_post = Announcement()
+        self.brownies = {} #Brownie point counter?
 
     @property
     def is_default(self):
         """ Indicate whether the QQueue has any non-default values. """
-        return self.active == [] and self.capacity == 10 and self.bursted == []
+        return self.active == [] and self.capacity == 10
 
 
 class QueueCog(commands.Cog):
@@ -67,22 +87,54 @@ class QueueCog(commands.Cog):
         embed = discord.Embed(title=title, description=queue_str, color=self.color)
         embed.set_footer(text='Players will receive a notification when the queue fills up')
         return embed
-
-    def burst_queue(self, guild):
-        queue = self.guild_queues[guild]
-        queue.bursted = queue.active  # Save bursted queue for player draft
-        queue.active = []  # Reset the player queue to empty
-        user_mentions = ''.join(user.mention for user in queue.bursted)
-        popflash_cog = self.bot.get_cog('PopflashCog')
-
-        if popflash_cog:
-            popflash_url = popflash_cog.get_popflash_url(guild)
-            description = f'[Join the PopFlash lobby here]({popflash_url})'
+    
+    def add_points(self,user):
+        """Add a brownie point for volunteering to water"""
+        queue = self.guild_queues[user.guild]
+        if user.display_name in queue.brownies:
+            if queue.brownies[user.display_name] < 0:
+                queue.brownies[user.display_name] = 0
+            queue.brownies[user.display_name] += 1
         else:
-            description = ''
-
-        pop_embed = discord.Embed(title='Queue has filled up!', description=description, color=self.color)
-        return pop_embed, user_mentions
+            queue.brownies[user.display_name] = 1
+        print("Added Points: ",queue.brownies[user.display_name])
+        return
+    
+    def remove_points(self,ctx):
+        """Add a brownie point for volunteering to water"""
+        user = ctx.author
+        queue = self.guild_queues[user.guild]
+        if user.display_name in queue.brownies:
+            queue.brownies[user.display_name] -= 1
+            if queue.brownies[user.display_name] <= -3:
+                self.clear_user(ctx)
+        return
+    
+    def clear_user(self, ctx):
+        user = ctx.author
+        queue = self.guild_queues[user.guild]
+        brownies = queue.brownies[user.display_name]
+        if brownies <= -6:
+            self.queue_remove(ctx)
+        else:
+            self.warn_user(user)
+        return
+    
+    def queue_remove(ctx):
+        print("Got into queue_remove")
+        self.remove(ctx)
+        ctx.send("Terribly sorry, but you have been removed from the queue due to inactivity.")
+    
+    def warn_user(self, user):
+        print("Warning user with a slap on the wrist")
+        return
+    
+    @commands.command(brief='Penalize someone. For testing purposes only')
+    async def penalty(self, ctx):
+        user = ctx.author
+        self.remove_points(ctx)
+        queue = self.guild_queues[user.guild]
+        print(queue.brownies[user.display_name])
     
     @commands.command(brief='Join the queue')
     async def join(self, ctx):
@@ -109,7 +161,7 @@ class QueueCog(commands.Cog):
         queue.last_msg = await ctx.send(embed=embed)
 
 
-    @commands.command(brief='Leave the queue (or the bursted queue)')
+    @commands.command(brief='Leave the queue')
     async def leave(self, ctx):
         """ Check if the member can be remobed from the guild and remove them if so. """
         queue = self.guild_queues[ctx.guild]
@@ -170,26 +222,6 @@ class QueueCog(commands.Cog):
             if removee in queue.active:
                 queue.active.remove(removee)
                 title = f'**{removee.display_name}** has been removed from the queue'
-            elif queue.bursted and removee in queue.bursted:
-                queue.bursted.remove(removee)
-
-                if len(queue.active) >= 1:
-                    # await ctx.trigger_typing()  # Need to retrigger typing for second send
-                    saved_queue = queue.active.copy()
-                    first_in_queue = saved_queue[0]
-                    queue.active = queue.bursted + [first_in_queue]
-                    queue.bursted = []
-                    pop_embed, user_mentions = self.burst_queue(ctx.guild)
-                    await ctx.send(user_mentions, embed=pop_embed)
-
-                    if len(queue.active) > 1:
-                        queue.active = saved_queue[1:]
-
-                    return
-                else:
-                    queue.active = queue.bursted
-                    queue.bursted = []
-                    title = f'**{removee.display_name}** has been removed from the most recent filled queue'
 
             else:
                 title = f'**{removee.display_name}** is not in the queue or the most recent filled queue'
@@ -269,7 +301,6 @@ class QueueCog(commands.Cog):
     @commands.command(brief='Announce your Dodo Code to the world. Must be top of queue to do so.')
     async def dodo(self, ctx, dodo_code=None):
         queue = self.guild_queues[ctx.guild]
-        watering_can = "<:watering_can:707933922125676634>" #Your custom watering can emoji. Will change every server
         #Goal: Makes an announcement by the Bot that said Islander is next.
         if len(queue.active) == 0: #Checks if queue is empty
             embed = discord.Embed(title='Wuh-oh! It seems like the queue is empty. please hit q!join to join the queue!', color=self.color)
@@ -282,44 +313,27 @@ class QueueCog(commands.Cog):
         else: #Person is legitimate and good
             islandee = ctx.author.display_name
             '''Will need to edit this line later. Need to add watering_can emoji'''
-            embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can} to earmark you for going.', color=self.color)
+            embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can.emoji} to earmark you for going.', color=self.color)
             
-        await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
+        queue.curr_post.message = msg #Store Current Dodo Post as current listing
+        queue.curr_post.host = ctx #Store Current Dodo Post as current listing
+        await msg.add_reaction(watering_can.emoji)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
         """ Remove a map from the draft when a user reacts with the corresponding icon. """
+        print("Garnered a reaction")
         if user == self.bot.user:
             return
-
+            
         guild = user.guild
-        mdraft_data = self.guild_mdraft_data[guild]
+        queue = self.guild_queues[guild]
 
-        if mdraft_data.message is None or reaction.message.id != mdraft_data.message.id:
+        if queue.curr_post.message is None or reaction.message.id != queue.curr_post.message.id:
             return
-
-        for m in mdraft_data.maps_left.copy():  # Iterate over copy to modify original w/o consequences
-            if str(reaction.emoji) == m.emoji:
-                async for u in reaction.users():
-                    await reaction.remove(u)
-
-                mdraft_data.maps_left.remove(m)
-
-                if len(mdraft_data.maps_left) == 1:
-                    map_result = mdraft_data.maps_left[0]
-                    await mdraft_data.message.clear_reactions()
-                    embed_title = f'We\'re going to {map_result.name}! {map_result.emoji}'
-                    embed = discord.Embed(title=embed_title, color=self.color)
-                    embed.set_image(url=map_result.image_url)
-                    embed.set_footer(text=f'Be sure to select {map_result.name} in the PopFlash lobby')
-                    await mdraft_data.message.edit(embed=embed)
-                    mdraft_data.maps_left = None
-                    mdraft_data.message = None
-                else:
-                    embed_title = f'**{user.name}** has banned **{m.name}**'
-                    embed = discord.Embed(title=embed_title, description=self.maps_left_str(guild), color=self.color)
-                    embed.set_thumbnail(url=m.image_url)
-                    embed.set_footer(text=MapDraftCog.footer)
-                    await mdraft_data.message.edit(embed=embed)
-
-                break
+        
+        if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
+            #Give them brownie points or something
+            self.add_points(user)
+            return   
