@@ -97,22 +97,17 @@ class QueueCog(commands.Cog):
             queue.active.append(ctx.author)
             title = f'**{ctx.author.display_name}** has been added to the queue'
 
-        # Check and burst queue if full
-        '''
-        if len(queue.active) == queue.capacity:
-            embed, user_mentions = self.burst_queue(ctx.guild)
-            await ctx.send(user_mentions, embed=embed)
-        else:
-            embed = self.queue_embed(ctx.guild, title)
+        # Check and burst queue if full.
+        embed = self.queue_embed(ctx.guild, title)
 
-            if queue.last_msg:
-                try:
-                    await queue.last_msg.delete()
-                except discord.errors.NotFound:
-                    pass
+        if queue.last_msg:
+            try:
+                await queue.last_msg.delete()
+            except discord.errors.NotFound:
+                pass
 
-            queue.last_msg = await ctx.send(embed=embed)
-        '''
+        queue.last_msg = await ctx.send(embed=embed)
+
 
     @commands.command(brief='Leave the queue (or the bursted queue)')
     async def leave(self, ctx):
@@ -253,7 +248,7 @@ class QueueCog(commands.Cog):
         except ValueError:
             embed = discord.Embed(title=f'{new_cap} is not an integer', color=self.color)
         else:
-            if new_cap < 2 or new_cap > 100:
+            if new_cap < 1 or new_cap > 100:
                 embed = discord.Embed(title='Capacity is outside of valid range', color=self.color)
             else:
                 self.guild_queues[ctx.guild].capacity = new_cap
@@ -270,3 +265,61 @@ class QueueCog(commands.Cog):
             title = f'Cannot change queue capacity without {missing_perm} permission!'
             embed = discord.Embed(title=title, color=self.color)
             await ctx.send(embed=embed)
+    
+    @commands.command(brief='Announce your Dodo Code to the world. Must be top of queue to do so.')
+    async def dodo(self, ctx, dodo_code=None):
+        queue = self.guild_queues[ctx.guild]
+        watering_can = "<:watering_can:707933922125676634>" #Your custom watering can emoji. Will change every server
+        #Goal: Makes an announcement by the Bot that said Islander is next.
+        if len(queue.active) == 0: #Checks if queue is empty
+            embed = discord.Embed(title='Wuh-oh! It seems like the queue is empty. please hit q!join to join the queue!', color=self.color)
+        elif ctx.author != queue.active[0]: #Checks if person is top of queue.
+            embed = discord.Embed(title='Wuh-oh! You are not first in line right now.', color=self.color)
+        elif dodo_code == None: #Check if something resenbling a Dodo Code was actually enetered
+            embed = discord.Embed(title='Wuh-oh! Please put your Dodo Code after the command', color=self.color)
+        elif len(dodo_code) != 5:
+            embed = discord.Embed(title='Wuh-oh! It seems you did not enter a Dodo Code', color=self.color)
+        else: #Person is legitimate and good
+            islandee = ctx.author.display_name
+            '''Will need to edit this line later. Need to add watering_can emoji'''
+            embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can} to earmark you for going.', color=self.color)
+            
+        await ctx.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        """ Remove a map from the draft when a user reacts with the corresponding icon. """
+        if user == self.bot.user:
+            return
+
+        guild = user.guild
+        mdraft_data = self.guild_mdraft_data[guild]
+
+        if mdraft_data.message is None or reaction.message.id != mdraft_data.message.id:
+            return
+
+        for m in mdraft_data.maps_left.copy():  # Iterate over copy to modify original w/o consequences
+            if str(reaction.emoji) == m.emoji:
+                async for u in reaction.users():
+                    await reaction.remove(u)
+
+                mdraft_data.maps_left.remove(m)
+
+                if len(mdraft_data.maps_left) == 1:
+                    map_result = mdraft_data.maps_left[0]
+                    await mdraft_data.message.clear_reactions()
+                    embed_title = f'We\'re going to {map_result.name}! {map_result.emoji}'
+                    embed = discord.Embed(title=embed_title, color=self.color)
+                    embed.set_image(url=map_result.image_url)
+                    embed.set_footer(text=f'Be sure to select {map_result.name} in the PopFlash lobby')
+                    await mdraft_data.message.edit(embed=embed)
+                    mdraft_data.maps_left = None
+                    mdraft_data.message = None
+                else:
+                    embed_title = f'**{user.name}** has banned **{m.name}**'
+                    embed = discord.Embed(title=embed_title, description=self.maps_left_str(guild), color=self.color)
+                    embed.set_thumbnail(url=m.image_url)
+                    embed.set_footer(text=MapDraftCog.footer)
+                    await mdraft_data.message.edit(embed=embed)
+
+                break

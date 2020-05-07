@@ -9,7 +9,7 @@ DATA_PATH = 'guild_data.json'
 
 def run(discord_token, dbl_token=None, donate_url=None, generic=False):
     """ Create the bot, add the cogs and run it. """
-    bot = commands.Bot(command_prefix=('q!', 'Q!'), case_insensitive=True)
+    bot = commands.Bot(command_prefix=('t?', 'T?'), case_insensitive=True)
     bot.add_cog(cogs.CacherCog(bot, DATA_PATH))
     bot.add_cog(cogs.ConsoleCog(bot))
     bot.add_cog(cogs.HelpCog(bot, BOT_COLOR))
