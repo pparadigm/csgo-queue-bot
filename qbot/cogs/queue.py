@@ -1,7 +1,7 @@
 # queue.py
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 
 class Iconography:
@@ -51,6 +51,7 @@ class QueueCog(commands.Cog):
         self.bot = bot
         self.guild_queues = {}  # Maps Guild -> QQueue
         self.color = color
+        self.queue_maintenance.start()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -58,6 +59,7 @@ class QueueCog(commands.Cog):
         for guild in self.bot.guilds:
             if guild not in self.guild_queues:  # Don't add empty queue if guild already loaded
                 self.guild_queues[guild] = QQueue()
+               
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
@@ -92,78 +94,92 @@ class QueueCog(commands.Cog):
     def add_points(self,user):
         """Add a brownie point for volunteering to water"""
         queue = self.guild_queues[user.guild]
-        if user.display_name in queue.brownies:
-            if queue.brownies[user.display_name] < -3:
-                queue.old_brownies[user.display_name] = queue.brownies[user.display_name]
-                queue.brownies[user.display_name] += 3
-            queue.brownies[user.display_name] += 2
+        if user in queue.brownies:
+            if queue.brownies[user] < -3:
+                queue.old_brownies[user] = queue.brownies[user]
+                queue.brownies[user] += 3
+            else:
+                queue.brownies[user] += 2
         else:
-            queue.old_brownies[user.display_name] = 0
-            queue.brownies[user.display_name] = 0
-        print("Added Points: ",queue.brownies[user.display_name])
+            queue.old_brownies[user] = 0
+            queue.brownies[user] = 0
         return
     
-    def remove_points(self,user):
+    async def remove_points(self,user):
         """Add a brownie point for volunteering to water"""
         queue = self.guild_queues[user.guild]
-        if user.display_name in queue.brownies:
-            queue.old_brownies[user.display_name] = queue.brownies[user.display_name]
-            queue.brownies[user.display_name] -= 1
-            if queue.brownies[user.display_name] <= -3:
-                self.clear_user(user)
+        if user in queue.brownies:
+            queue.old_brownies[user] = queue.brownies[user]
+            queue.brownies[user] -= 1
+            if queue.brownies[user] <= -2:
+                await self.clear_user(user)
         else:
-            queue.old_brownies[user.display_name] = 0
-            queue.brownies[user.display_name] = 0
+            queue.old_brownies[user] = 0
+            queue.brownies[user] = 0
         return
     
-    def clear_user(self, user):
+    async def clear_user(self, user):
         queue = self.guild_queues[user.guild]
-        brownies = queue.brownies[user.display_name]
-        if brownies <= -6 and user.id != queue.active[0].id:
-            self.queue_remove(user)
+        brownies = queue.brownies[user]
+        if brownies <= -4 and user.id != queue.active[0].id:
+            await self.queue_remove(user)
+            queue.brownies.pop(user, None)
+            queue.old_brownies.pop(user, None)
+        elif user in queue.active:
+            await self.warn_user(user, -2 - brownies)
         else:
-            self.warn_user(user, -2 - brownies)
+            queue.brownies.pop(user, None)
+            queue.old_brownies.pop(user, None)
         return
     
-    def queue_remove(self, user):
+    async def queue_remove(self, user):
         queue = self.guild_queues[user.guild]
         if user in queue.active:
             queue.active.remove(user)
-            user.send("We are terribly sorry, but due to inactivity foound by the bot, we have been forced to remove you from the queue. Please contact a mod if this is a mistake.")        
-        queue.brownies.pop(user.display_name, None)
-        queue.old_brownies.pop(user.display_name, None) 
+            await user.send("We are terribly sorry, but due to inactivity foound by the bot, we have been forced to remove you from the queue. Please contact a mod if this is a mistake.")        
+        queue.brownies.pop(user, None)
+        queue.old_brownies.pop(user, None) 
         return
     
-    def warn_user(self, user, n):
+    async def warn_user(self, user, n):
         queue = self.guild_queues[user.guild]
-        brownies = queue.brownies[user.display_name]
+        brownies = queue.brownies[user]
         if user.id == queue.active[0].id:
-            user.send("Hi! We noticed it may be taking a while to water your flowers. need any help from the mods?")
+            await user.send("Hi! We noticed it may be taking a while to water your flowers. need any help from the mods?")
         elif user in queue.active:
-            user.send(f"Hi! We've noticed that you may be inactive in the queue. If you could, please help out water. Thank you! This counts as warning # {n}.")
+            await user.send(f"Hi! We've noticed that you may be inactive in the queue. If you could, please help out water. Thank you! This counts as warning # {n}.")
         return
     
-    def point_swipe(self):
-        queue = self.guild_queues[user.guild]        
+    async def point_swipe(self,queue):     
         for key in queue.brownies.keys():
-            queue.brownies[user.display_name] -= 1
+            await self.remove_points(key)
         print("I have collected the point tax.")
         return
+        
+    def isDodo(self, dodo):
+        print("entered checker")
+        dodo = str(dodo) #Cast as String for easier usage
+        bad_letters = ['I','O','Z','i','o','z']
+        result = len(dodo) == 5
+        print(result)
+        for d in dodo:
+            result = result and not(d in bad_letters)
+        return result and dodo.isalnum()
     
-    @commands.command(brief='Testing Private DMs')
-    async def message(self, ctx):
-        user = ctx.author
-        print("Attempting to send private DM")
-        await user.send("Imma slide in here for testing.")
-        print("Did I do it?")
+    # @commands.command(brief='Testing Private DMs')
+    # async def message(self, ctx):
+        # user = ctx.author
+        # print("Attempting to send private DM")
+        # await user.send("Imma slide in here for testing.")
+        # print("Did I do it?")
     
     @commands.command(brief='Penalize someone. For testing purposes only')
     @commands.has_permissions(administrator=True)
     async def penalty(self, ctx):
         user = ctx.author
-        self.remove_points(user)
+        await self.remove_points(user)
         queue = self.guild_queues[user.guild]
-        print(queue.brownies[user.display_name])
+        print(queue.brownies[user])
     
     @commands.command(brief='Join the queue')
     async def join(self, ctx):
@@ -177,6 +193,7 @@ class QueueCog(commands.Cog):
         else:  # Open spot in queue
             queue.active.append(ctx.author)
             title = f'**{ctx.author.display_name}** has been added to the queue'
+            self.add_points(ctx.author)
 
         # Check and burst queue if full.
         embed = self.queue_embed(ctx.guild, title)
@@ -194,12 +211,15 @@ class QueueCog(commands.Cog):
     async def leave(self, ctx):
         """ Check if the member can be remobed from the guild and remove them if so. """
         queue = self.guild_queues[ctx.guild]
+        user = ctx.author
         flag = False    #Flag for checking if author is top of queue
         if ctx.author == queue.active[0]:
             flag = True
         if ctx.author in queue.active:
             queue.active.remove(ctx.author)
             title = f'**{ctx.author.display_name}** has been removed from the queue '
+            queue.brownies.pop(user, None)
+            queue.old_brownies.pop(user, None)
         else:
             title = f'**{ctx.author.display_name}** isn\'t in the queue '
 
@@ -212,7 +232,6 @@ class QueueCog(commands.Cog):
 
         queue.last_msg = await ctx.channel.send(embed=embed)
         if flag:
-            self.point_swipe()
             if len(queue.active) > 0:
                 mention = queue.active[0].id
                 await ctx.send(f"<@{mention}>, you're good to go!")
@@ -232,7 +251,98 @@ class QueueCog(commands.Cog):
                 pass
 
         queue.last_msg = await ctx.send(embed=embed)
+        
+    @commands.command(usage='demote <user mention>',
+                      brief='Demote the mentioned user from the queue (must have server kick perms)')
+    @commands.has_permissions(kick_members=True)
+    async def demote(self, ctx):
+        try:
+            demotee = ctx.message.mentions[0]
+        except IndexError:
+            embed = discord.Embed(title='Mention a player in the command to demote them', color=self.color)
+            await ctx.send(embed=embed)
+        else:
+            queue = self.guild_queues[ctx.guild]
+            
+            flag = False    #Flag for checking if removee is top of queue
+                
+            if queue.active != [] and demotee in queue.active:
+                if demotee == queue.active[0]:
+                    flag = True
+                if queue.active[-1] == demotee:
+                    embed = discord.Embed(title='Player is already at bottom of the queue.', color=self.color)
+                    await ctx.send(embed=embed)
+                else:
+                    temp = demotee
+                    place = 0
+                    for i in range(len(queue.active)):
+                        if queue.active[i] == demotee:
+                            place = i
+                            break
+                    queue.active[i] = queue.active[i+1]
+                    queue.active[i+1] = temp
+                    embed = discord.Embed(title='Player moved down the queue.', color=self.color)
+                    await ctx.send(embed=embed)
+            else:
+                title = f'**{demotee.display_name}** is not in the queue'
+            
+            embed = self.queue_embed(ctx.guild, title)
+            if queue.last_msg:
+                try:
+                    await queue.last_msg.delete()
+                except discord.errors.NotFound:
+                    pass
 
+            queue.last_msg = await ctx.send(embed=embed)
+                 
+            if flag:
+                if len(queue.active) > 0:
+                    mention = queue.active[0].id
+                    await ctx.send(f"<@{mention}>, you're good to go!")
+                if len(queue.active) > 1:
+                    mention = queue.active[1].id
+                    await ctx.send(f"<@{mention}>, please be on deck with your Dodo Code!")
+        
+    @commands.command(usage='demote <user mention>',
+                      brief='Demote the mentioned user from the queue (must have server kick perms)')
+    @commands.has_permissions(kick_members=True)
+    async def promote(self, ctx):
+        try:
+            demotee = ctx.message.mentions[0]
+        except IndexError:
+            embed = discord.Embed(title='Mention a player in the command to promote them', color=self.color)
+            await ctx.send(embed=embed)
+        else:
+            queue = self.guild_queues[ctx.guild]
+         
+            if queue.active != [] and demotee in queue.active:
+                if queue.active[0] == demotee:
+                    embed = discord.Embed(title='Player is already at top of the queue.', color=self.color)
+                    await ctx.send(embed=embed)
+                else:
+                    temp = demotee
+                    place = 0
+                    for i in range(len(queue.active)):
+                        if queue.active[i] == demotee:
+                            place = i
+                            break
+                    queue.active[i] = queue.active[i-1]
+                    queue.active[i-1] = temp
+                    embed = discord.Embed(title='Player moved up the queue.', color=self.color)
+                    await ctx.send(embed=embed)
+            else:
+                title = f'**{demotee.display_name}** is not in the queue'
+                    
+            embed = self.queue_embed(ctx.guild, title)
+            if queue.last_msg:
+                try:
+                    await queue.last_msg.delete()
+                except discord.errors.NotFound:
+                    pass
+
+            queue.last_msg = await ctx.send(embed=embed)
+                 
+        
     @commands.command(usage='remove <user mention>',
                       brief='Remove the mentioned user from the queue (must have server kick perms)')
     @commands.has_permissions(kick_members=True)
@@ -246,15 +356,17 @@ class QueueCog(commands.Cog):
             queue = self.guild_queues[ctx.guild]
             
             flag = False    #Flag for checking if removee is top of queue
-            if removee == queue.active[0]:
-                flag = True
                 
-            if removee in queue.active:
+            if queue.active != [] and removee in queue.active:
+                if removee == queue.active[0]:
+                    flag = True
                 queue.active.remove(removee)
                 title = f'**{removee.display_name}** has been removed from the queue'
-
+                queue.brownies.pop(removee, None)
+                queue.old_brownies.pop(removee, None)
             else:
-                title = f'**{removee.display_name}** is not in the queue or the most recent filled queue'
+                title = f'**{removee.display_name}** is not in the queue'
+                
 
             embed = self.queue_embed(ctx.guild, title)
 
@@ -310,7 +422,7 @@ class QueueCog(commands.Cog):
         except ValueError:
             embed = discord.Embed(title=f'{new_cap} is not an integer', color=self.color)
         else:
-            if new_cap < 1 or new_cap > 100:
+            if new_cap < 2 or new_cap > 100:
                 embed = discord.Embed(title='Capacity is outside of valid range', color=self.color)
             else:
                 self.guild_queues[ctx.guild].capacity = new_cap
@@ -339,7 +451,7 @@ class QueueCog(commands.Cog):
             embed = discord.Embed(title='Wuh-oh! You are not first in line right now.', color=self.color)
         elif dodo_code == None: #Check if something resenbling a Dodo Code was actually enetered
             embed = discord.Embed(title='Wuh-oh! Please put your Dodo Code after the command', color=self.color)
-        elif len(dodo_code) != 5:
+        elif not self.isDodo(dodo_code):
             embed = discord.Embed(title='Wuh-oh! It seems you did not enter a Dodo Code', color=self.color)
         else: #Person is legitimate and good
             islandee = ctx.author.display_name
@@ -353,10 +465,10 @@ class QueueCog(commands.Cog):
             await msg.add_reaction(watering_can.emoji)
     
     @commands.command(brief='Check brownie status. For testing only.')
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(kick_members=True)
     async def brownie(self, ctx):
         queue = self.guild_queues[ctx.guild]
-        print(queue.brownies)
+        await ctx.send(queue.brownies)
     
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
@@ -391,6 +503,11 @@ class QueueCog(commands.Cog):
         
         if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
             #Give them brownie points or something
-            queue.brownies[user.display_name] = queue.old_brownies[user.display_name]
-            print("Points = ",queue.brownies[user.display_name])
-            return  
+            queue.brownies[user] = queue.old_brownies[user]
+            print("Points = ",queue.brownies[user])
+            return
+
+    @tasks.loop(minutes = 10)
+    async def queue_maintenance(self):
+        for queue in self.guild_queues:
+            await self.point_swipe(self.guild_queues[queue])
