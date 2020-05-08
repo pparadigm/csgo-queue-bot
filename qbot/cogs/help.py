@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands
 import Levenshtein as lev
 
-GITHUB = 'https://github.com/cameronshinn/csgo-queue-bot'  # TODO: Use git API to get link to repo?
+GITHUB = 'https://github.com/alrlchoa/acnh-water-bot'  # TODO: Use git API to get link to repo?
 
 
 class HelpCog(commands.Cog):
@@ -80,14 +80,9 @@ class HelpCog(commands.Cog):
     @commands.command(brief='Display basic info about this bot')
     async def info(self, ctx):
         """ Display the info embed. """
-        description = '_The definitive bot for setting up 10-man lobbies_\n'
-        description += '\nJoin the support server [here](https://discordapp.com/invite/tskeyDA)'
-        dbl_cog = self.bot.get_cog('DblCog')
-
-        if dbl_cog:
-            description += f'\nBe sure to upvote the bot on [top.gg]({dbl_cog.topgg_url})'
+        description = '_Your run-off-the-mill Gardening Bot'
 
         description += f'\nSource code can be found [here]({GITHUB}) on GitHub'
-        embed = discord.Embed(title='__10-Man Queue Bot__', description=description, color=self.color)
+        embed = discord.Embed(title='__ACNH Water Bot__', description=description, color=self.color)
         embed.set_thumbnail(url=self.logo)
         await ctx.send(embed=embed)
