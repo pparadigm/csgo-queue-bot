@@ -35,6 +35,7 @@ class QQueue:
         self.last_msg = last_msg  # Last sent confirmation message for the join command
         self.curr_post = Announcement()
         self.brownies = {} #Brownie point counter?
+        self.old_brownies = {}
 
     @property
     def is_default(self):
@@ -92,47 +93,75 @@ class QueueCog(commands.Cog):
         """Add a brownie point for volunteering to water"""
         queue = self.guild_queues[user.guild]
         if user.display_name in queue.brownies:
-            if queue.brownies[user.display_name] < 0:
-                queue.brownies[user.display_name] = 0
-            queue.brownies[user.display_name] += 1
+            if queue.brownies[user.display_name] < -3:
+                queue.old_brownies[user.display_name] = queue.brownies[user.display_name]
+                queue.brownies[user.display_name] += 3
+            queue.brownies[user.display_name] += 2
         else:
-            queue.brownies[user.display_name] = 1
+            queue.old_brownies[user.display_name] = 0
+            queue.brownies[user.display_name] = 0
         print("Added Points: ",queue.brownies[user.display_name])
         return
     
-    def remove_points(self,ctx):
+    def remove_points(self,user):
         """Add a brownie point for volunteering to water"""
-        user = ctx.author
         queue = self.guild_queues[user.guild]
         if user.display_name in queue.brownies:
+            queue.old_brownies[user.display_name] = queue.brownies[user.display_name]
             queue.brownies[user.display_name] -= 1
             if queue.brownies[user.display_name] <= -3:
-                self.clear_user(ctx)
+                self.clear_user(user)
+        else:
+            queue.old_brownies[user.display_name] = 0
+            queue.brownies[user.display_name] = 0
         return
     
-    def clear_user(self, ctx):
-        user = ctx.author
+    def clear_user(self, user):
         queue = self.guild_queues[user.guild]
         brownies = queue.brownies[user.display_name]
-        if brownies <= -6:
-            self.queue_remove(ctx)
+        if brownies <= -6 and user.id != queue.active[0].id:
+            self.queue_remove(user)
         else:
-            self.warn_user(user)
+            self.warn_user(user, -2 - brownies)
         return
     
-    def queue_remove(ctx):
-        print("Got into queue_remove")
-        self.remove(ctx)
-        ctx.send("Terribly sorry, but you have been removed from the queue due to inactivity.")
-    
-    def warn_user(self, user):
-        print("Warning user with a slap on the wrist")
+    def queue_remove(self, user):
+        queue = self.guild_queues[user.guild]
+        if user in queue.active:
+            queue.active.remove(user)
+            user.send("We are terribly sorry, but due to inactivity foound by the bot, we have been forced to remove you from the queue. Please contact a mod if this is a mistake.")        
+        queue.brownies.pop(user.display_name, None)
+        queue.old_brownies.pop(user.display_name, None) 
         return
+    
+    def warn_user(self, user, n):
+        queue = self.guild_queues[user.guild]
+        brownies = queue.brownies[user.display_name]
+        if user.id == queue.active[0].id:
+            user.send("Hi! We noticed it may be taking a while to water your flowers. need any help from the mods?")
+        elif user in queue.active:
+            user.send(f"Hi! We've noticed that you may be inactive in the queue. If you could, please help out water. Thank you! This counts as warning # {n}.")
+        return
+    
+    def point_swipe(self):
+        queue = self.guild_queues[user.guild]        
+        for key in queue.brownies.keys():
+            queue.brownies[user.display_name] -= 1
+        print("I have collected the point tax.")
+        return
+    
+    @commands.command(brief='Testing Private DMs')
+    async def message(self, ctx):
+        user = ctx.author
+        print("Attempting to send private DM")
+        await user.send("Imma slide in here for testing.")
+        print("Did I do it?")
     
     @commands.command(brief='Penalize someone. For testing purposes only')
+    @commands.has_permissions(administrator=True)
     async def penalty(self, ctx):
         user = ctx.author
-        self.remove_points(ctx)
+        self.remove_points(user)
         queue = self.guild_queues[user.guild]
         print(queue.brownies[user.display_name])
     
@@ -183,6 +212,7 @@ class QueueCog(commands.Cog):
 
         queue.last_msg = await ctx.channel.send(embed=embed)
         if flag:
+            self.point_swipe()
             if len(queue.active) > 0:
                 mention = queue.active[0].id
                 await ctx.send(f"<@{mention}>, you're good to go!")
@@ -301,6 +331,7 @@ class QueueCog(commands.Cog):
     @commands.command(brief='Announce your Dodo Code to the world. Must be top of queue to do so.')
     async def dodo(self, ctx, dodo_code=None):
         queue = self.guild_queues[ctx.guild]
+        flag = False
         #Goal: Makes an announcement by the Bot that said Islander is next.
         if len(queue.active) == 0: #Checks if queue is empty
             embed = discord.Embed(title='Wuh-oh! It seems like the queue is empty. please hit q!join to join the queue!', color=self.color)
@@ -314,12 +345,19 @@ class QueueCog(commands.Cog):
             islandee = ctx.author.display_name
             '''Will need to edit this line later. Need to add watering_can emoji'''
             embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can.emoji} to earmark you for going.', color=self.color)
-            
+            flag = True
         msg = await ctx.send(embed=embed)
-        queue.curr_post.message = msg #Store Current Dodo Post as current listing
-        queue.curr_post.host = ctx #Store Current Dodo Post as current listing
-        await msg.add_reaction(watering_can.emoji)
-
+        if flag:
+            queue.curr_post.message = msg #Store Current Dodo Post as current listing
+            queue.curr_post.host = ctx #Store Current Dodo Post as current listing
+            await msg.add_reaction(watering_can.emoji)
+    
+    @commands.command(brief='Check brownie status. For testing only.')
+    @commands.has_permissions(administrator=True)
+    async def brownie(self, ctx):
+        queue = self.guild_queues[ctx.guild]
+        print(queue.brownies)
+    
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
         """ Remove a map from the draft when a user reacts with the corresponding icon. """
@@ -336,4 +374,23 @@ class QueueCog(commands.Cog):
         if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
             #Give them brownie points or something
             self.add_points(user)
-            return   
+            return
+     
+    @commands.Cog.listener()
+    async def on_reaction_remove(self, reaction, user):
+        """ Remove a map from the draft when a user reacts with the corresponding icon. """
+        print("Garnered a reaction")
+        if user == self.bot.user:
+            return
+            
+        guild = user.guild
+        queue = self.guild_queues[guild]
+
+        if queue.curr_post.message is None or reaction.message.id != queue.curr_post.message.id:
+            return
+        
+        if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
+            #Give them brownie points or something
+            queue.brownies[user.display_name] = queue.old_brownies[user.display_name]
+            print("Points = ",queue.brownies[user.display_name])
+            return  
