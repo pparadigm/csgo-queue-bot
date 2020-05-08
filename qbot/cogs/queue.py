@@ -16,6 +16,9 @@ class Iconography:
 BASE_URL = 'https://raw.githubusercontent.com/alrlchoa/acnh-water-bot/tree/master/assets/maps/images/'
 
 watering_can = Iconography('Watering Can', '<:watering_can:707933922125676634>', f'{BASE_URL}watering_can.png')
+#<:watercan:705499143560364032> Actual water can on server
+distress = Iconography('Distress Signal', '<:distress:708350808714117201>', f'{BASE_URL}distress.png')
+#Actual water distress on server
 
 class Announcement:
     """A group of attributes representing the current running post. Needed to keep track of current poster."""
@@ -33,7 +36,7 @@ class QQueue:
         self.capacity = capacity  # Max queue size
         # self.timeout = timeout  # Number of minutes of inactivity after which to empty the queue
         self.last_msg = last_msg  # Last sent confirmation message for the join command
-        self.curr_post = Announcement()
+        self.curr_posts = []
         self.brownies = {} #Brownie point counter?
         self.old_brownies = {}
 
@@ -118,6 +121,34 @@ class QueueCog(commands.Cog):
             queue.brownies[user] = 0
         return
     
+    async def emergency_slide(self, ctx):
+        """Push poster of this post to second in queue or higher. Distress Signal"""
+        queue = self.guild_queues[ctx.guild]
+        user = ctx.author
+        #Alert people of distress
+        await ctx.send(f"<@{user.id}> has sent a distress signal. Something has happened at their island. Attempting to requeue them.")
+        
+        if len(queue.active) == 0:
+            #List is empty
+            queue.active.append(user)
+            embed = self.queue_embed(ctx.guild, f'**{user.display_name}** is back in the queue')
+        elif queue.active[0] == user:
+            #They have not left queue yet
+            embed = self.queue_embed(ctx.guild, f'**{user.display_name}** never left')
+        else:
+            if user in queue.active:
+                queue.active.remove(user)
+            queue.active.insert(1,user)
+            embed = self.queue_embed(ctx.guild, f'**{user.display_name}** is back in the queue')
+            
+        if queue.last_msg:
+            try:
+                await queue.last_msg.delete()
+            except discord.errors.NotFound:
+                pass
+
+        queue.last_msg = await ctx.send(embed=embed)
+    
     async def clear_user(self, user):
         queue = self.guild_queues[user.guild]
         brownies = queue.brownies[user]
@@ -165,6 +196,14 @@ class QueueCog(commands.Cog):
         for d in dodo:
             result = result and not(d in bad_letters)
         return result and dodo.isalnum()
+    
+    def add_currs(self,msg,ctx):
+        """Adds Dodo Post to history. Max length is 5"""
+        queue = self.guild_queues[ctx.guild]
+        queue.curr_posts.append(Announcement(msg,ctx))
+        if len(queue.curr_posts) > 5:
+            queue.curr_posts.remove(queue.curr_posts[0])
+        return
     
     # @commands.command(brief='Testing Private DMs')
     # async def message(self, ctx):
@@ -456,13 +495,13 @@ class QueueCog(commands.Cog):
         else: #Person is legitimate and good
             islandee = ctx.author.display_name
             '''Will need to edit this line later. Need to add watering_can emoji'''
-            embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can.emoji} to earmark you for going.', color=self.color)
+            embed = discord.Embed(title=f' Islander: {islandee} \n Dodo Code: {dodo_code} \n Please react with {watering_can.emoji} to earmark you for going.\n Host, tap the {distress.emoji} if something drastic happens.', color=self.color)
             flag = True
         msg = await ctx.send(embed=embed)
         if flag:
-            queue.curr_post.message = msg #Store Current Dodo Post as current listing
-            queue.curr_post.host = ctx #Store Current Dodo Post as current listing
+            self.add_currs(msg,ctx) #Store Current Dodo Post into history
             await msg.add_reaction(watering_can.emoji)
+            await msg.add_reaction(distress.emoji)
     
     @commands.command(brief='Check brownie status. For testing only.')
     @commands.has_permissions(kick_members=True)
@@ -473,20 +512,31 @@ class QueueCog(commands.Cog):
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
         """ Remove a map from the draft when a user reacts with the corresponding icon. """
-        print("Garnered a reaction")
         if user == self.bot.user:
             return
             
         guild = user.guild
         queue = self.guild_queues[guild]
-
-        if queue.curr_post.message is None or reaction.message.id != queue.curr_post.message.id:
-            return
         
-        if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
-            #Give them brownie points or something
-            self.add_points(user)
-            return
+        for curr_post in queue.curr_posts:
+            print(curr_post)
+            if curr_post.message is None or reaction.message.id != curr_post.message.id:
+                pass
+            elif str(reaction.emoji) == watering_can.emoji: # Someone clicked water
+                #Give them brownie points or something
+                self.add_points(user)
+                return
+            elif str(reaction.emoji) == distress.emoji:
+                print("I did a thing")
+                #Put distressed person 2nd in line and prompt the people
+                if user == curr_post.host.author:
+                    await self.emergency_slide(curr_post.host)
+                    print(queue.curr_posts)
+                    queue.curr_posts.remove(curr_post)
+                    print(queue.curr_posts)
+                else:
+                    await curr_post.message.remove_reaction(distress.emoji,user)
+                return
      
     @commands.Cog.listener()
     async def on_reaction_remove(self, reaction, user):
@@ -497,15 +547,16 @@ class QueueCog(commands.Cog):
             
         guild = user.guild
         queue = self.guild_queues[guild]
-
-        if queue.curr_post.message is None or reaction.message.id != queue.curr_post.message.id:
-            return
         
-        if str(reaction.emoji) == watering_can.emoji: # Someone clicked water
-            #Give them brownie points or something
-            queue.brownies[user] = queue.old_brownies[user]
-            print("Points = ",queue.brownies[user])
-            return
+        for curr_post in queue.curr_posts:
+            print(curr_post)
+            if curr_post.message is None or reaction.message.id != curr_post.message.id:
+                pass
+            elif str(reaction.emoji) == watering_can.emoji: # Someone removed water
+                queue.brownies[user] = queue.old_brownies[user]
+                print("Points = ",queue.brownies[user])
+                return
+        
 
     @tasks.loop(minutes = 10)
     async def queue_maintenance(self):
