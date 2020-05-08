@@ -1,6 +1,5 @@
 # cacher.py
 
-from . import mapdraft
 import discord
 from discord.ext import commands, tasks
 import asyncio
@@ -46,10 +45,6 @@ class CacherCog(commands.Cog):
             guild_data['queue']['active'] = [user.id for user in guild_queue.active]
             guild_data['queue']['capacity'] = guild_queue.capacity
 
-            if mapdraft_cog:
-                guild_data['mdraft'] = {}
-                guild_data['mdraft']['map_pool'] = [m.dev_name for m in guild_mdraft.map_pool]
-
             data[str(guild.id)] = guild_data
 
         with open(self.guild_data_file, 'w+') as f:
@@ -61,7 +56,6 @@ class CacherCog(commands.Cog):
             return
 
         queue_cog = self.bot.get_cog('QueueCog')
-        mapdraft_cog = self.bot.get_cog('MapDraftCog')
         data = json.load(open(self.guild_data_file, 'r'))
 
         for guild_id, guild_data in data.items():
@@ -76,15 +70,6 @@ class CacherCog(commands.Cog):
                 guild_queue.capacity = guild_data['queue']['capacity']
                 active = guild_data['queue']['active']
                 guild_queue.active = [self.bot.get_user(id) for id in active if self.bot.get_user(id)]
-
-            if mapdraft_cog:  # Generic bot version doesn't have MapDraft cog
-                guild_mdraft = mapdraft_cog.guild_mdraft_data.get(guild)
-            else:
-                continue
-
-            if guild_mdraft and 'mdraft' in guild_data:
-                all_maps = mapdraft.ALL_MAPS
-                guild_mdraft.map_pool = [m for m in all_maps if m.dev_name in guild_data['mdraft']['map_pool']]
 
     @tasks.loop(minutes=10)
     async def periodic_save(self):
